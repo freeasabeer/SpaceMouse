@@ -1,6 +1,7 @@
 //Author Stefano Sbarra
 //April 2020
 //FREE FOR ANY NON COMMERCIAL PROJECT
+//Original source: https://www.instructables.com/Space-Mouse-With-Arduino-Micro-Fully-Printable/
 
 //THIS SKETCH MAKES ARDUINO LEONARDO (OR MICRO) WORK AS A SPACE 3D MOUSE FOR INVENTOR AND FUSION 360
 //NORMAL JOYSTICK MOVE ACT AS VIEW ROTATION USING F4 KEY
@@ -10,6 +11,11 @@
 #include <Arduino.h>
 #include <Mouse.h>
 #include <Keyboard.h>
+
+//#define DEBUG
+//#define INVERT_MOUSE
+#define LONG_PRESS_INTERVAL 500 //interval to establish if quick or long
+#define MOVE_SLOW_DOWN       10 //this slows down the moves
 
 //moved and esc key helps to go back from view mode to design
 
@@ -43,15 +49,17 @@ int b3flag = 0;               //click check
 int used = 0;                 //check if const are shown
 int lastused = 0;             //check if const are shown
 
-//int invertMouse = 1;        //Invert joystick based on orientation
-int invertMouse = -1;         //Noninverted joystick based on orientation
-
+#ifdef INVERT_MOUSE
+  int invertMouse = 1;        //Invert joystick based on orientation
+#else
+  int invertMouse = -1;         //Noninverted joystick based on orientation
+#endif
 unsigned long releasetime = 0;  //used to register the releasing time (to select home or zoom)
 unsigned long presstime = 0;    //as above
 int registertime = 0;           //used to selective enter the release mode
 unsigned long diff = 0;         //difference between time checks to read quick or long press
 
-const long interval = 500;      //interval to establish if quick or long
+const long interval = LONG_PRESS_INTERVAL; //interval to establish if quick or long
 
 void setup()
 {
@@ -72,8 +80,9 @@ void setup()
 
   Mouse.begin();      //Init mouse emulation
   Keyboard.begin();   //Init keyboard emulation
-//  Serial.begin(9600);
-
+#ifdef DEBUG
+  Serial.begin(9600);
+#endif
 }
 
 void loop()
@@ -83,14 +92,15 @@ void loop()
   vertValue = analogRead(vertPin) - vertZero;  // read vertical offset
   horzValue = analogRead(horzPin) - horzZero;  // read horizontal offset
 
-//  Serial.print("B1: ");
-//  Serial.println(digitalRead(b1Pin));
-//  Serial.print("B2: ");
-//  Serial.println(digitalRead(b2Pin));
-//  Serial.print("B3: ");
-//  Serial.println(digitalRead(b3Pin));
-//  Serial.println(" ");
-
+#ifdef DEBUG
+  Serial.print("B1: ");
+  Serial.println(digitalRead(b1Pin));
+  Serial.print("B2: ");
+  Serial.println(digitalRead(b2Pin));
+  Serial.print("B3: ");
+  Serial.println(digitalRead(b3Pin));
+  Serial.println(" ");
+#endif
 
 //BUTTON 1
 
@@ -220,6 +230,6 @@ void loop()
 
     }
 
-  delay(10); //this slows down the moves
+  delay(MOVE_SLOW_DOWN); //this slows down the moves
 
 }
