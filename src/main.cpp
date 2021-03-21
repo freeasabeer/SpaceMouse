@@ -12,55 +12,45 @@
 #include <Mouse.h>
 #include <Keyboard.h>
 
+typedef enum {ROTATE, ZOOM, NORMAL} spacemouse_mode_t;
+
 //#define DEBUG
-//#define INVERT_MOUSE
-#define LONG_PRESS_INTERVAL 500 //interval to establish if quick or long
-#define MOVE_SLOW_DOWN       5/*10*/ //this slows down the moves
-#define SENSIVITY            150/*200*/  //Higher sensitivity value = slower mouse, should be <= about 500
+#define INVERT_MOUSE 1           // Set to -1 to invert
+#define LONG_PRESS_INTERVAL 500  //interval to establish if quick or long press
+#define MOVE_SLOW_DOWN       5   //this slows down the moves
+const int sensitivity [3] = {/*ROTATE*/ 150, /*ZOOM*/150, /*NORMAL*/75}; //Higher sensitivity value = slower mouse, should be <= about 500
+#define MOVE_THRESHOLD 2         // Use of 2 instead of 0 cancels the small fluctuation between joystick position readings
+
 
 //moved and esc key helps to go back from view mode to design
 
 int horzPin = A0;  // Analog output of horizontal joystick pin
 int vertPin = A1;  // Analog output of vertical joystick pin
-int selPin = 10;   // select button pin of joystick
-int b1Pin = 7;     // button 1
-int b2Pin = 8;     // button 2
-int b3Pin = 9;     // button 3
+int selPin  = 10;  // select button pin of joystick
+int b1Pin   =  7;  // button 1
+int b2Pin   =  8;  // button 2
+int b3Pin   =  9;  // button 3
 
-char f3key = KEY_F3;      //zoom view
-char f4key = KEY_F4;      //rotate view
-char f6key = KEY_F6;      //home view
-char f7key = KEY_F7;      //slice graphics (INVENTOR ONLY)
-char f8key = KEY_F8;      //show constraints (INVENTOR ONLY)
-char f9key = KEY_F9;      //hide constraints (INVENTOR ONLY)
-char keyhome = KEY_HOME;  //fit zoom
-char esc = KEY_ESC;       //ESC key
+spacemouse_mode_t default_mode = NORMAL; //selects mouse mode: normal, zoom or rotate by default
+spacemouse_mode_t mode = NORMAL;
+int moved = 0;                  //checks if the joystick has moved
+int pressed = 0;                //checks if the joystick has been pressed
 
-int moved = 0;    //checks if the joystick has moved
-int mode = 0;     //selects zoom or rotate
-int pressed = 0;  //checks if the joystick has been pressed
+int vertZero, horzZero;         //Stores the initial value of each axis, usually around 512
+int vertValue, horzValue;       //Stores current analog output of each axis
 
-int vertZero, horzZero;       //Stores the initial value of each axis, usually around 512
-int vertValue, horzValue;     //Stores current analog output of each axis
-const int sensitivity = SENSIVITY;  //Higher sensitivity value = slower mouse, should be <= about 500
-int mouseClickFlag = 0;       //another click check
-int b1flag = 0;               //click check
-int b2flag = 0;               //click check
-int b3flag = 0;               //click check
-int used = 0;                 //check if const are shown
-int lastused = 0;             //check if const are shown
+int mouseClickFlag = 0;         //another click check
+int b1flag = 0;                 //click check
+int b2flag = 0;                 //click check
+int b3flag = 0;                 //click check
+int used = 0;                   //check if const are shown
+int lastused = 0;               //check if const are shown
 
-#ifdef INVERT_MOUSE
-  int invertMouse = 1;        //Invert joystick based on orientation
-#else
-  int invertMouse = -1;         //Noninverted joystick based on orientation
-#endif
 unsigned long releasetime = 0;  //used to register the releasing time (to select home or zoom)
 unsigned long presstime = 0;    //as above
 int registertime = 0;           //used to selective enter the release mode
 unsigned long diff = 0;         //difference between time checks to read quick or long press
 
-const long interval = LONG_PRESS_INTERVAL; //interval to establish if quick or long
 
 void setup()
 {
@@ -79,8 +69,8 @@ void setup()
   vertZero = analogRead(vertPin);  // get the initial values
   horzZero = analogRead(horzPin);  // Joystick should be in neutral position when reading these
 
-  Mouse.begin();      //Init mouse emulation
-  Keyboard.begin();   //Init keyboard emulation
+  Mouse.begin();                   //Init mouse emulation
+  Keyboard.begin();                //Init keyboard emulation
 #ifdef DEBUG
   Serial.begin(9600);
 #endif
@@ -89,7 +79,7 @@ void setup()
 void loop()
 {
   unsigned long currentMillis = millis();
-
+  int invertMouse;
   vertValue = analogRead(vertPin) - vertZero;  // read vertical offset
   horzValue = analogRead(horzPin) - horzZero;  // read horizontal offset
 
@@ -100,7 +90,6 @@ void loop()
   Serial.println(digitalRead(b2Pin));
   Serial.print("B3: ");
   Serial.println(digitalRead(b3Pin));
-  Serial.println(" ");
 #endif
 
 //BUTTON 1
@@ -111,11 +100,12 @@ void loop()
     used = 1;
 
     if (used != lastused) {
-      Keyboard.write(f8key);
+      default_mode = ROTATE;
     } else {
-      Keyboard.write(f9key);
+      default_mode = NORMAL;
       used = 0;
     }
+    mode = default_mode;
 
   }
   else if (digitalRead(b1Pin) && (b1flag))
@@ -130,7 +120,7 @@ void loop()
   if ((digitalRead(b2Pin) == 0) && (!b2flag))  // if button 2 is pressed
   {
     b2flag = 1;
-    Keyboard.write(keyhome);
+    Keyboard.write(KEY_HOME); // fit zoom
   }
   else if (digitalRead(b1Pin) && (b2flag))
   {
@@ -143,7 +133,7 @@ void loop()
   if ((digitalRead(b3Pin) == 0) && (!b3flag))  // if button 3 is pressed
   {
     b3flag = 1;
-    Keyboard.write(f7key);
+    Keyboard.write(KEY_F7); //slice graphics (INVENTOR ONLY)
   }
   else if (digitalRead(b3Pin) && (b3flag))
   {
@@ -159,76 +149,90 @@ void loop()
     registertime = 1;
     mouseClickFlag = 1;
     pressed = 1;
-    mode = 1;
+    mode = ZOOM;
   }
-  else if ((digitalRead(selPin)) && (mouseClickFlag) && (registertime)) // if the joystick button is not pressed
+  else if ((digitalRead(selPin)) && (mouseClickFlag) && (registertime)) // if the joystick button is released
   {
     releasetime = currentMillis;
     registertime = 0;
     mouseClickFlag = 0;
     pressed = 0;
-    mode = 0;
+    mode = default_mode;
 
-    diff = (releasetime - presstime);  //check if the click was quick or long
+    diff = (releasetime - presstime);  //check if the press was quick or long
 
-    if(diff < interval)                //if quick call home view
+    if(diff < LONG_PRESS_INTERVAL)     //if quick press: call home view
     {
-      Keyboard.write(f6key);
+      Keyboard.write(KEY_F6); // home view
     }
   }
-
+#ifdef DEBUG
+  Serial.print("Default mode: ");
+  Serial.println(default_mode);
+  Serial.print("Mode: ");
+  Serial.println(mode);
+  Serial.println(" ");
+#endif
 
   switch(mode) {   //rotate or zoom
 
-    case 0:
+    case ROTATE:
 
-      invertMouse = -1; //restore mouse orientation
+      invertMouse = -(INVERT_MOUSE); //restore mouse orientation
 
-      if ( (vertValue > 2)||(vertValue < (-2)) ){  // position two instead of 0 cancel the small fluctuation between readings
-        Keyboard.press(f4key);
+      if ( (vertValue <= MOVE_THRESHOLD)&&(vertValue >= (-MOVE_THRESHOLD)) )
+        vertValue = 0;
+      if ( (horzValue <= MOVE_THRESHOLD)&&(horzValue >= (-MOVE_THRESHOLD)) )
+        horzValue = 0;
+      if ( (horzValue != 0) || (vertValue != 0)) {
+        Keyboard.press(KEY_F4); //rotate view (inventor mode)
         Mouse.press(MOUSE_LEFT);
-        Mouse.move(0, (invertMouse * (vertValue / sensitivity)), 0); // move mouse on y axis with f4 key pressed to rotate view
-        moved=1;
+        Mouse.move((invertMouse * (horzValue / sensitivity[NORMAL])), (invertMouse * (vertValue / sensitivity[NORMAL])), 0); // move mouse with f4 key pressed to rotate view
+        moved = 1;
       }
-
-      if ( (horzValue > 2)||(horzValue < (-2)) ){
-        Keyboard.press(f4key);
-        Mouse.press(MOUSE_LEFT);
-        Mouse.move((invertMouse * (horzValue / sensitivity)), 0, 0); // move mouse on x axis with f4 key pressed to rotate view
-        moved=1;
-      }
-
-      if ( (vertValue <= 2)&&(vertValue >= (-2))  &&  (horzValue <= 2)&&(horzValue >= (-2))  ){   //if joystick is in neutral position release all and stroke ESC to help go back to design view
+      else {  // joystick is in neutral position: release all and stroke ESC to help go back to design view
+        if (moved == 1) {
           Keyboard.releaseAll();
           Mouse.release(MOUSE_LEFT);
-          if(moved==1){
-            Keyboard.write(esc);
-            moved=0;
+          Keyboard.write(KEY_ESC);
+          moved = 0;
+        }
+      }
+      break;
+
+    case ZOOM:
+
+      invertMouse = (INVERT_MOUSE);  //mouse inverted to push for zoom in and pull for zoom out
+
+      if ( (vertValue > MOVE_THRESHOLD)||(vertValue < (-MOVE_THRESHOLD)) ){
+        Keyboard.press(KEY_F3); // zoom view
+        Mouse.press(MOUSE_LEFT);
+        Mouse.move(0, (invertMouse * (vertValue / sensitivity[ZOOM])), 0); // move mouse on y axis with f3 key pressed to zoom view
+        moved=1;
+      }
+
+      if ( (vertValue <= MOVE_THRESHOLD)&&(vertValue >= (-MOVE_THRESHOLD))  &&  (horzValue <= MOVE_THRESHOLD)&&(horzValue >= (-MOVE_THRESHOLD))  ){
+          if (moved == 1) {
+            Keyboard.releaseAll();
+            Mouse.release(MOUSE_LEFT);
+            Keyboard.write(KEY_ESC);
+            moved = 0;
           }
       }
       break;
 
-    case 1:
+    case NORMAL:
 
-      invertMouse = 1;  //mouse inverted to push for zoom in and pull for zoom out
+      invertMouse = -(INVERT_MOUSE); //restore mouse orientation
 
-      if ( (vertValue > 2)||(vertValue < (-2)) ){
-        Keyboard.press(f3key);
-        Mouse.press(MOUSE_LEFT);
-        Mouse.move(0, (invertMouse * (vertValue / sensitivity)), 0); // move mouse on y axis with f3 key pressed to zoom view
-        moved=1;
-      }
+      if ( (vertValue <= MOVE_THRESHOLD)&&(vertValue >= (-MOVE_THRESHOLD)) )
+        vertValue = 0;
+      if ( (horzValue <= MOVE_THRESHOLD)&&(horzValue >= (-MOVE_THRESHOLD)) )
+        horzValue = 0;
+      if ( (horzValue != 0) || (vertValue != 0))
+        Mouse.move((invertMouse * (horzValue / sensitivity[NORMAL])), (invertMouse * (vertValue / sensitivity[NORMAL])), 0); // move mouse
 
-      if ( (vertValue <= 2)&&(vertValue >= (-2))  &&  (horzValue <= 2)&&(horzValue >= (-2))  ){
-          Keyboard.releaseAll();
-          Mouse.release(MOUSE_LEFT);
-          if(moved==1){
-            Keyboard.write(esc);
-            moved=0;
-          }
-      }
       break;
-
     }
 
   delay(MOVE_SLOW_DOWN); //this slows down the moves
