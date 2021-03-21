@@ -15,12 +15,13 @@
 //#define DEBUG
 //#define INVERT_MOUSE
 #define LONG_PRESS_INTERVAL 500 //interval to establish if quick or long
-#define MOVE_SLOW_DOWN       10 //this slows down the moves
+#define MOVE_SLOW_DOWN       5/*10*/ //this slows down the moves
+#define SENSIVITY            150/*200*/  //Higher sensitivity value = slower mouse, should be <= about 500
 
 //moved and esc key helps to go back from view mode to design
 
-int horzPin = A1;  // Analog output of horizontal joystick pin
-int vertPin = A0;  // Analog output of vertical joystick pin
+int horzPin = A0;  // Analog output of horizontal joystick pin
+int vertPin = A1;  // Analog output of vertical joystick pin
 int selPin = 10;   // select button pin of joystick
 int b1Pin = 7;     // button 1
 int b2Pin = 8;     // button 2
@@ -41,7 +42,7 @@ int pressed = 0;  //checks if the joystick has been pressed
 
 int vertZero, horzZero;       //Stores the initial value of each axis, usually around 512
 int vertValue, horzValue;     //Stores current analog output of each axis
-const int sensitivity = 200;  //Higher sensitivity value = slower mouse, should be <= about 500
+const int sensitivity = SENSIVITY;  //Higher sensitivity value = slower mouse, should be <= about 500
 int mouseClickFlag = 0;       //another click check
 int b1flag = 0;               //click check
 int b2flag = 0;               //click check
